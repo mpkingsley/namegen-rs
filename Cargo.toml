@@ -1,6 +1,6 @@
 [package]
 name = "namegen"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["mkingsley"]
 edition = "2018"
 license = "LISCENSE"
@@ -8,5 +8,5 @@ license = "LISCENSE"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-markovr >= "0.4"
-roxmltree >= "0.13"
+markovr = "^0.4"
+roxmltree = "^0.13"
