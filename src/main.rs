@@ -1,23 +1,29 @@
 // use std::io;
 // use std::fs;
+#![warn(clippy::needless_return)]
 
-extern crate markovr;
+extern crate markov;
 extern crate roxmltree;
 extern crate random_pick;
 extern crate rand;
 
+#[derive(Clone)]
 pub struct Rule {
     fmt: Vec<String>, //idref string
     weight: u32, //weight for each idref
     style: String,    //style with formatting
 }
 
+struct Chain {
+    id: u32,
+    chain: markov::Chain<char>,
+}
 
 fn main() {  
     //TODO: parse args for filename (and potential output file)
 
     //Load and parse file:
-    let filename = "gothic.xml";
+    let filename = "roman.xml";
     let xmldata = std::fs::read_to_string(filename).unwrap();
     let xmldoc = roxmltree::Document::parse(&xmldata).unwrap();
     let rulesets =  get_rulesets(&xmldoc);
@@ -38,9 +44,8 @@ fn main() {
                 }
             }
         }
-        std::io::stdin()
-            .read_line(&mut ctrl)
-            .expect("Error Reading from stdin"); 
+        std::io::stdin().read_line(&mut ctrl).expect("Error Reading from stdin"); 
+        print!("\x1B[2J\x1B[1;1H"); //clear the screen
         c =  ctrl.chars().collect::<Vec<char>>()[0];
         if c.is_numeric() {
             ctrl = ctrl.chars().filter(|d| d.is_digit(10)).collect();
@@ -52,26 +57,34 @@ fn main() {
                 selection = String::from(selection.split('\t').collect::<Vec<&str>>()[0]);
                 println!("{: }",selection);
                 let namefmt = get_fmt(&xmldoc, rulesets[index-1]);
-                for rule in namefmt {
+                for rule in namefmt.clone() {
                     println!("{: }, weight: {: }", rule.style, rule.weight);
                     println!("Includes the following lists:");
                     for list in rule.fmt {
                         println!("     {: }", list);
                     }
                 }
+                ctrl = String::new();
                 println!("How many names to generate?");
                 std::io::stdin()
                     .read_line(&mut ctrl)
                     .expect("Error Reading from stdin"); 
                 ctrl = ctrl.chars().filter(|d| d.is_digit(10)).collect();
-                let iter = ctrl.parse::<usize>().expect("Invalid entry");
-                
+                let iter = ctrl.parse::<usize>().unwrap_or(1);
+                print!("\x1B[2J\x1B[1;1H"); //clear the screen
+                println!("Starting Name Generation:");
+                let names = iter_generate(&xmldoc, &namefmt, iter);
+                for (i,name) in names.iter().enumerate(){
+                    
+                    println!("name {: }: {: }",i+1,name);
+                };
                 
 
                 
             }
             else {
                     println! ("Invalid selection: {: }",index);
+                    continue;
             }
         }
         else {
@@ -92,7 +105,7 @@ fn get_lists(xml: &roxmltree::Document) -> Vec<u32> {
             ids.push(node.id().get());
         }
     }
-    return ids
+    ids
   }
 
 fn get_rulesets(xml: &roxmltree::Document) -> Vec<u32> {
@@ -102,7 +115,7 @@ fn get_rulesets(xml: &roxmltree::Document) -> Vec<u32> {
           ids.push(node.id().get());
       }
   }
-  return ids
+  ids
 }
 //formats the Ruleset id in a prettier format
 fn fmt_menu(xml: &roxmltree::Document, id: u32) -> String {
@@ -110,7 +123,7 @@ fn fmt_menu(xml: &roxmltree::Document, id: u32) -> String {
     let node = xml.get_node(roxmltree::NodeId::from(id)).unwrap();
     let mut descr:Vec<&str> = Vec::new();
     pretty.push_str(node.attribute("title").unwrap());
-    pretty.push_str(":"); 
+    pretty.push(':'); 
     for child in node.children(){
       if child.tag_name().name().to_lowercase() == "category" {
         let title = child.attributes()[0].value();
@@ -131,7 +144,7 @@ fn fmt_menu(xml: &roxmltree::Document, id: u32) -> String {
         pretty.push_str("     ");
         pretty.push_str(item);
     }
-    return pretty
+    pretty
 }
 
 fn get_fmt(xml: &roxmltree::Document, id: u32) -> Vec<Rule> {
@@ -162,7 +175,7 @@ fn find_id(xml: &roxmltree::Document, idref: &str) -> u32 {
             return id
         };
     }
-   return 0
+ 0 //return 0 if not found
 }
 
 //returns training data String and number of items from a list
@@ -171,16 +184,20 @@ fn get_tdata(xml: &roxmltree::Document, listid: u32) ->  (String,u32) {
     let list = xml.get_node(roxmltree::NodeId::from(listid)).unwrap();
     for value in list.children(){
         if value.tag_name().name().to_lowercase() == "value" {
-            tdata.0.push_str(value.text().unwrap_or(""));
-            tdata.1 += tdata.1 ;
+            let text = value.text().unwrap_or("").trim();
+            tdata.0.push_str(text);
+            tdata.1 = tdata.1 + 1 ;
         }
         tdata.0.push(' ');//whitespace separator for training
+
     }
 tdata
 }
 
 pub fn generate(xml:&roxmltree::Document, rule: &Rule) -> String {
 let mut name = String::new();
+let mut idlist:Vec<u32> = Vec::new();
+let mut chains:Vec<Chain> = Vec::new();
 for idref in &rule.fmt {
     match idref.as_str() {
      "space" => name.push(' '),
@@ -193,6 +210,7 @@ for idref in &rule.fmt {
         else{
             use roxmltree::NodeId;
             let node = xml.get_node(NodeId::from(id)).unwrap();
+            
             match node.tag_name().name().to_lowercase().as_str() {
               "ruleset" => {
                 let subset = get_fmt(xml, id);
@@ -201,43 +219,68 @@ for idref in &rule.fmt {
                 },
               "list" => {
                   let tdata = get_tdata(xml,id);
-                  if tdata.1 < 20 {
-                     use rand::{thread_rng, Rng};
-  
-                     let mut rng = thread_rng();
-                     let n: u32 = rng.gen_range(0..tdata.1);
-                     let list = xml.get_node(NodeId::from(id));
-                     //TODO get n  in list
+                  if tdata.1 < 25 {
+                    use rand::distributions::{Distribution, Uniform};
+                     let list = xml.get_node(NodeId::from(id)).unwrap();
+                     if tdata.1 == 1{
+                        let text=list.first_child().unwrap().text().unwrap_or("error in xml parsing").trim();
+                        println!(" Only one entry in {: }: {: }",idref,text);
+                        name.push_str(text);
+                        continue;
+                     }
+                     let mut rng = rand::thread_rng();
+                     let n = Uniform::from(1..tdata.1);
+                     let j = n.sample(&mut rng);
+                     print!("{: } is too small for markov to work with. Randomly selecting number {: } from {: } items:", idref, j, tdata.1);
+                     for (i,value) in list.children().enumerate() {
+                        if (value.tag_name().name().to_lowercase() == "value") && i== j as usize {
+                            let text=value.text().unwrap().trim();
+                            println!(" {: }",text);
+                            name.push_str(text);
+                        }
+
+                     };
                   }
                   else {
-                      //todo create & generate using marcov 
-                  }
-
-
-
-
-              },
-              &_ => (),
+                      if !idlist.contains(&id){
+                        idlist.push(id);   
+                        let order = 3;  //could possible unhardcode order here.  need convinsing reason to do so. Personal testing indicates that 3 is the best order for shorter sequences like names, etc
+                        println! ("training Markov on {: }", idref);
+                        chains.push(construct_chain(xml,id,order)); 
+                        println! ("Training concluded"); 
+                      }
+                      let m = idlist.iter().position(|p| p == &id).unwrap();
+                      for c in chains[m].chain.generate(){
+                          if c != ' ' {
+                              name.push(c);
+                          }
+                      }   
+                  }//end else
+                 },
+               &_ => (),
             }
         }
        },
      }
     }
-
-return name
+name
 }
 
-pub fn iter_generate(xml:&roxmltree::Document, rule: &Rule, iter:usize) -> Vec<String>{
+pub fn iter_generate(xml:&roxmltree::Document, ruleset: &[Rule], iter:usize) -> Vec<String>{
+    //TODO Refactor so each unique chain is only generated and trained once.
     let mut names:Vec<String> = Vec::new();
-    let i = 0;
+    let mut i = 0;
      while i < iter {
+         let rule = rule_select(ruleset);
+         println!("Generating name {: }: {: }", (i + 1) , rule.style);
          names.push(generate(xml, rule));
+         i = i +1;
 
     }
-    return names
+    names
 }
 
-fn rule_select(ruleset: &Vec<Rule>) -> &Rule {
+fn rule_select(ruleset: &[Rule]) -> &Rule {
   use random_pick::gen_usize_with_weights;
   let mut weights:Vec<usize> = Vec::new();
   for r in ruleset {
@@ -245,19 +288,23 @@ fn rule_select(ruleset: &Vec<Rule>) -> &Rule {
   }
    let index = gen_usize_with_weights(ruleset.len(), &weights).unwrap();
    let rule = &ruleset[index];
-  
-    return rule
+
+  &rule
 }
 
-fn construct_chain(tdata:String, order:usize ) -> markovr::MarkovChain<char> {
- use markovr::MarkovChain;
- let mut chain = MarkovChain::new(order, &[]);
- let alpha: Vec<char> = tdata.chars().collect();
- for i in 1..alpha.len() {
-     chain.train(&[alpha[i-order]], alpha[i], 1);
- }
+fn construct_chain(xml: &roxmltree::Document, id:u32, order:usize ) -> Chain {
+ let mut chain = markov::Chain::of_order(order);
+ println!("Collecting training data");
+ let alpha: Vec<char> = get_tdata(xml,id).0.chars().collect();
+ let mut view: Vec<char> = Vec::new();
+ for a in alpha {
+     view.push(a);
+     if a == ' ' {
+         chain.feed(view.drain(0..view.len()));
+     }
 
- chain
+ }
+ Chain {id, chain}
 }
 
 fn get_rule(xml: &roxmltree::Document, id: u32) -> Rule {
@@ -296,7 +343,6 @@ fn get_rule(xml: &roxmltree::Document, id: u32) -> Rule {
         let trim:String = w.chars().filter(|d| d.is_digit(10)).collect();
         ruleweight = trim.parse::<u32>().expect("Unexpected xml data.  Please check your sourcefile");    
     };
-  let namestyle = Rule { fmt:list, weight:ruleweight, style:style};
-  namestyle
+   return Rule { fmt:list, weight:ruleweight, style};
 }
 

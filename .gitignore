@@ -1,3 +1,4 @@
 /target
 workspace.code-workspace
 /*.xml
+generator.dtd

@@ -8,7 +8,7 @@ license = "LICENSE"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-markovr = "^0.4"
+markov = "1.1"
 roxmltree = "^0.13"
 random-pick = "^1.2"
 rand = "^0.8"
