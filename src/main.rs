@@ -5,7 +5,7 @@
 extern crate markov;
 extern crate roxmltree;
 extern crate random_pick;
-extern crate rand;
+extern crate oorandom;
 
 #[derive(Clone)]
 pub struct Rule {
@@ -15,7 +15,7 @@ pub struct Rule {
 }
 
 struct Chain {
-    id: u32,
+    id: u32, //node id
     chain: markov::Chain<char>,
 }
 
@@ -23,7 +23,7 @@ fn main() {
     //TODO: parse args for filename (and potential output file)
 
     //Load and parse file:
-    let filename = "roman.xml";
+    let filename = "gothic.xml";
     let xmldata = std::fs::read_to_string(filename).unwrap();
     let xmldoc = roxmltree::Document::parse(&xmldata).unwrap();
     let rulesets =  get_rulesets(&xmldoc);
@@ -178,7 +178,7 @@ fn find_id(xml: &roxmltree::Document, idref: &str) -> u32 {
  0 //return 0 if not found
 }
 
-//returns training data String and number of items from a list
+//returns training data String and number of items from a list (not a ruleset)
 fn get_tdata(xml: &roxmltree::Document, listid: u32) ->  (String,u32) {
     let mut tdata = (String::new(),0);
     let list = xml.get_node(roxmltree::NodeId::from(listid)).unwrap();
@@ -194,90 +194,101 @@ fn get_tdata(xml: &roxmltree::Document, listid: u32) ->  (String,u32) {
 tdata
 }
 
-pub fn generate(xml:&roxmltree::Document, rule: &Rule) -> String {
-let mut name = String::new();
-let mut idlist:Vec<u32> = Vec::new();
-let mut chains:Vec<Chain> = Vec::new();
-for idref in &rule.fmt {
-    match idref.as_str() {
-     "space" => name.push(' '),
-     "hyphen"=> name.push('-'),
-     &_ =>{            
-        let id = find_id(xml, &idref);
-        if id == 0 {
-            eprintln!("ID not found; please check xml file");
+fn get_data(xml: &roxmltree::Document, listid: u32) -> Vec<String> {
+    let mut data:Vec<String> = Vec::new();
+    let list = xml.get_node(roxmltree::NodeId::from(listid)).unwrap();
+    for value in list.children(){
+        if value.tag_name().name().to_lowercase() == "value" {
+            let text = value.text().unwrap_or("Parsing Err").trim();
+            data.push(String::from(text));
+            println!("Found data: {: }", text);
         }
-        else{
-            use roxmltree::NodeId;
-            let node = xml.get_node(NodeId::from(id)).unwrap();
-            
-            match node.tag_name().name().to_lowercase().as_str() {
-              "ruleset" => {
-                let subset = get_fmt(xml, id);
-                let subrule = rule_select(&subset);
-                name.push_str(generate(xml,&subrule).as_str());
-                },
-              "list" => {
-                  let tdata = get_tdata(xml,id);
-                  if tdata.1 < 25 {
-                    use rand::distributions::{Distribution, Uniform};
-                     let list = xml.get_node(NodeId::from(id)).unwrap();
-                     if tdata.1 == 1{
-                        let text=list.first_child().unwrap().text().unwrap_or("error in xml parsing").trim();
-                        println!(" Only one entry in {: }: {: }",idref,text);
-                        name.push_str(text);
-                        continue;
-                     }
-                     let mut rng = rand::thread_rng();
-                     let n = Uniform::from(1..tdata.1);
-                     let j = n.sample(&mut rng);
-                     print!("{: } is too small for markov to work with. Randomly selecting number {: } from {: } items:", idref, j, tdata.1);
-                     for (i,value) in list.children().enumerate() {
-                        if (value.tag_name().name().to_lowercase() == "value") && i== j as usize {
-                            let text=value.text().unwrap().trim();
-                            println!(" {: }",text);
-                            name.push_str(text);
-                        }
-
-                     };
-                  }
-                  else {
-                      if !idlist.contains(&id){
-                        idlist.push(id);   
-                        let order = 3;  //could possible unhardcode order here.  need convinsing reason to do so. Personal testing indicates that 3 is the best order for shorter sequences like names, etc
-                        println! ("training Markov on {: }", idref);
-                        chains.push(construct_chain(xml,id,order)); 
-                        println! ("Training concluded"); 
-                      }
-                      let m = idlist.iter().position(|p| p == &id).unwrap();
-                      for c in chains[m].chain.generate(){
-                          if c != ' ' {
-                              name.push(c);
-                          }
-                      }   
-                  }//end else
-                 },
-               &_ => (),
-            }
-        }
-       },
-     }
+        else {
+            println!("Tag found with name: {: }",(value.tag_name().name().to_lowercase()));
+        };
     }
+data
+}
+
+pub fn generate(xml:&roxmltree::Document, ruleset: &[Rule]) -> String {
+let name = String::from(iter_generate(xml,ruleset,1)[0].as_str());
+ 
 name
 }
 
 pub fn iter_generate(xml:&roxmltree::Document, ruleset: &[Rule], iter:usize) -> Vec<String>{
-    //TODO Refactor so each unique chain is only generated and trained once.
-    let mut names:Vec<String> = Vec::new();
-    let mut i = 0;
-     while i < iter {
-         let rule = rule_select(ruleset);
-         println!("Generating name {: }: {: }", (i + 1) , rule.style);
-         names.push(generate(xml, rule));
-         i = i +1;
+    use roxmltree::NodeId;
 
+    let mut names:Vec<String> = Vec::new();
+    let mut chains:Vec<Chain> = Vec::new();
+    let mut count = 1;
+    let order = 3; //Order of three seems to be suffient for name generation.  
+    loop {
+        names.push(String::new());
+        let rule = rule_select(ruleset);
+        for idref in &rule.fmt {
+            let id = find_id(xml, idref);
+            match idref.as_str() {
+              "space" => names[count-1].push(' '),
+              "hyphen"=> names[count-1].push('-'),
+              &_ => {
+                 let mut trained:bool = false;
+                 let mut index:usize;
+                for (i,c) in (&chains).iter().enumerate() {
+                    if c.id == id {
+                         trained = true;
+                         index = i;
+                         break;
+                    }
+                }//end for
+                let node = xml.get_node(NodeId::from(id)).unwrap();
+                match node.tag_name().name().to_lowercase().as_str() {
+                    "ruleset" => {
+                      let subset = get_fmt(xml, id);
+                      println!("Found Subrule at {: } ",idref );
+                      println!("Generating...");
+                      names[count-1].push_str(generate(xml,&subset).as_str()); 
+                    },
+                    "list" => {
+                        let data = get_data(xml,id);
+                        if !trained && (data.len() > 25) {
+                            chains.push(construct_chain(xml,find_id(xml, idref),order));
+                            index = chains.len()-1;    
+                        };
+                        if data.len() > 1 && data.len() <= 25  {
+                            use std::time::{SystemTime, UNIX_EPOCH};                        
+                            let t = SystemTime::now().duration_since(UNIX_EPOCH)
+                                .expect("Time went backwards");
+                            let seed = t.subsec_nanos() as u64;
+                            let mut rng = oorandom::Rand32::new(seed);
+                            print!("Dataset {: } is too small for Markov to work with.  ", idref);
+                            let s:usize = (rng.rand_range(1..(data.len())as u32)-1) as usize ;
+                            println!("Randomly selecting {: } of {: }: {: }",s,data.len(),&data[s]);
+                            names[count-1].push_str(&data[s]);                            
+                        }
+
+                    },
+                    &_ => (),
+                } //end match 
+              },
+            };
+                
+            
+        };
+    if count == iter {
+    return names;
     }
-    names
+    else{
+        names.push(String::new());
+        count = count+1;
+    }
+    }
+
+
+
+
+
+
 }
 
 fn rule_select(ruleset: &[Rule]) -> &Rule {
