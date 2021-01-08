@@ -1,7 +1,7 @@
 // use std::io;
 // use std::fs;
 #![warn(clippy::needless_return)]
-
+extern crate clap;
 extern crate markov;
 extern crate roxmltree;
 extern crate random_pick;
@@ -20,11 +20,21 @@ struct Chain {
 }
 
 fn main() {  
+    use clap::{Arg, App};
     //TODO: parse args for filename (and potential output file)
+    let cli = App::new("namegen")
+       .version("0.0.1")
+       .about("Generates Realistic-looking Names from markovian chains ")
+       .author("M Kingsley")
+       .args_from_usage(
+        "-o, --output=[FILE] 'Sets a output file'
+         -t, --type=[CSV,TXT] 'Choose output type'
+        <INPUT>              'Sets the input file to use'")
+       .get_matches();
 
     //Load and parse file:
-    let filename = "gothic.xml";
-    let xmldata = std::fs::read_to_string(filename).unwrap();
+    let filename = cli.value_of("INPUT").unwrap();
+    let xmldata = std::fs::read_to_string(filename).expect("Error Reading File;");
     let xmldoc = roxmltree::Document::parse(&xmldata).unwrap();
     let rulesets =  get_rulesets(&xmldoc);
 
@@ -71,16 +81,30 @@ fn main() {
                     .expect("Error Reading from stdin"); 
                 ctrl = ctrl.chars().filter(|d| d.is_digit(10)).collect();
                 let iter = ctrl.parse::<usize>().unwrap_or(1);
+                ctrl = String::new();
+                println!("What order markov chain to use (2-3 recomended)?");
+                std::io::stdin()
+                    .read_line(&mut ctrl)
+                    .expect("Error Reading from stdin"); 
+                ctrl = ctrl.chars().filter(|d| d.is_digit(10)).collect();
+                let mut order = ctrl.parse::<usize>().unwrap_or(3);
+                if order == 0 {
+                    eprintln!("0-order chains not implimented. Using default order of 3.");
+                    order = 3;
+                }
                 print!("\x1B[2J\x1B[1;1H"); //clear the screen
                 println!("Starting Name Generation:");
-                let names = iter_generate(&xmldoc, &namefmt, iter);
+                let names = iter_generate(&xmldoc, &namefmt, order, iter);
                 for (i,name) in names.iter().enumerate(){
                     
-                    println!("name {: }: {: }",i+1,name);
+                    println!("Name {: }: {: }",i+1,name);
                 };
-                
-
-                
+                ctrl = String::new();
+                println!("Press Enter to continue:");
+                std::io::stdin()
+                    .read_line(&mut ctrl)
+                    .expect("Error Reading from stdin");
+                print!("\x1B[2J\x1B[1;1H"); //clear the screen
             }
             else {
                     println! ("Invalid selection: {: }",index);
@@ -178,22 +202,7 @@ fn find_id(xml: &roxmltree::Document, idref: &str) -> u32 {
  0 //return 0 if not found
 }
 
-//returns training data String and number of items from a list (not a ruleset)
-fn get_tdata(xml: &roxmltree::Document, listid: u32) ->  (String,u32) {
-    let mut tdata = (String::new(),0);
-    let list = xml.get_node(roxmltree::NodeId::from(listid)).unwrap();
-    for value in list.children(){
-        if value.tag_name().name().to_lowercase() == "value" {
-            let text = value.text().unwrap_or("").trim();
-            tdata.0.push_str(text);
-            tdata.1 = tdata.1 + 1 ;
-        }
-        tdata.0.push(' ');//whitespace separator for training
-
-    }
-tdata
-}
-
+//returns training data from a list (not a ruleset)
 fn get_data(xml: &roxmltree::Document, listid: u32) -> Vec<String> {
     let mut data:Vec<String> = Vec::new();
     let list = xml.get_node(roxmltree::NodeId::from(listid)).unwrap();
@@ -201,44 +210,44 @@ fn get_data(xml: &roxmltree::Document, listid: u32) -> Vec<String> {
         if value.tag_name().name().to_lowercase() == "value" {
             let text = value.text().unwrap_or("Parsing Err").trim();
             data.push(String::from(text));
-            println!("Found data: {: }", text);
+           // println!("Found data: {: }", text);
         }
-        else {
+        /* else {
             println!("Tag found with name: {: }",(value.tag_name().name().to_lowercase()));
-        };
+        }; */
     }
 data
 }
 
 pub fn generate(xml:&roxmltree::Document, ruleset: &[Rule]) -> String {
-let name = String::from(iter_generate(xml,ruleset,1)[0].as_str());
+let name = String::from(iter_generate(xml,ruleset,3,1)[0].as_str());
  
 name
 }
 
-pub fn iter_generate(xml:&roxmltree::Document, ruleset: &[Rule], iter:usize) -> Vec<String>{
+pub fn iter_generate(xml:&roxmltree::Document, ruleset: &[Rule], order:usize, iter:usize) -> Vec<String>{
     use roxmltree::NodeId;
 
     let mut names:Vec<String> = Vec::new();
     let mut chains:Vec<Chain> = Vec::new();
-    let mut count = 1;
-    let order = 3; //Order of three seems to be suffient for name generation.  
+    let mut count = 0;  
     loop {
-        names.push(String::new());
+        let mut name = String::new();
         let rule = rule_select(ruleset);
+        println!("Generating name {: }: {: }",names.len(),rule.style);
         for idref in &rule.fmt {
             let id = find_id(xml, idref);
             match idref.as_str() {
-              "space" => names[count-1].push(' '),
-              "hyphen"=> names[count-1].push('-'),
+              "space" => name.push(' '),
+              "hyphen"=> name.push('-'),
               &_ => {
                  let mut trained:bool = false;
-                 let mut index:usize;
+                 let mut index:usize = 0;
                 for (i,c) in (&chains).iter().enumerate() {
                     if c.id == id {
                          trained = true;
                          index = i;
-                         break;
+                         println!("Found {: } chain at index {: }", idref, i);
                     }
                 }//end for
                 let node = xml.get_node(NodeId::from(id)).unwrap();
@@ -247,15 +256,17 @@ pub fn iter_generate(xml:&roxmltree::Document, ruleset: &[Rule], iter:usize) -> 
                       let subset = get_fmt(xml, id);
                       println!("Found Subrule at {: } ",idref );
                       println!("Generating...");
-                      names[count-1].push_str(generate(xml,&subset).as_str()); 
+                      name.push_str(generate(xml,&subset).as_str()); 
+                      println!("End Subrule Generation");
                     },
                     "list" => {
                         let data = get_data(xml,id);
-                        if !trained && (data.len() > 25) {
+                        if !trained && (data.len() >= 20) {
                             chains.push(construct_chain(xml,find_id(xml, idref),order));
+                            println!("Training Markov on {: }", idref);
                             index = chains.len()-1;    
                         };
-                        if data.len() > 1 && data.len() <= 25  {
+                        if data.len() > 1 && data.len() < 20  {
                             use std::time::{SystemTime, UNIX_EPOCH};                        
                             let t = SystemTime::now().duration_since(UNIX_EPOCH)
                                 .expect("Time went backwards");
@@ -263,8 +274,19 @@ pub fn iter_generate(xml:&roxmltree::Document, ruleset: &[Rule], iter:usize) -> 
                             let mut rng = oorandom::Rand32::new(seed);
                             print!("Dataset {: } is too small for Markov to work with.  ", idref);
                             let s:usize = (rng.rand_range(1..(data.len())as u32)-1) as usize ;
-                            println!("Randomly selecting {: } of {: }: {: }",s,data.len(),&data[s]);
-                            names[count-1].push_str(&data[s]);                            
+                            println!("Randomly selecting {: } of {: }: {: }",(s+1),data.len(),&data[s]);
+                            name.push_str(&data[s]);                            
+                        }
+                        else if data.len() == 1 {
+                            println!("Only one item in {: }: {:}",idref, &data[0]);
+                            name.push_str(&data[0]);                            
+                        }
+                        else {
+                            print!("{: } chain ", idref);
+                            let text:Vec<char> = chains[index].chain.generate(); 
+                            let s:String = text.into_iter().collect();
+                            println!("generates: {: }", s);
+                            name.push_str(&s.as_str());                            
                         }
 
                     },
@@ -272,15 +294,21 @@ pub fn iter_generate(xml:&roxmltree::Document, ruleset: &[Rule], iter:usize) -> 
                 } //end match 
               },
             };
+
+
                 
             
         };
-    if count == iter {
-    return names;
+    while names.contains(&name) {
+        println!("Duplicate name. Regenerating with fresh data.");
+        name = generate(xml, ruleset);
     }
-    else{
-        names.push(String::new());
+    names.push(name);
+    if count < (iter-1) {
         count = count+1;
+    }
+    else {
+        return names
     }
     }
 
@@ -304,16 +332,16 @@ fn rule_select(ruleset: &[Rule]) -> &Rule {
 }
 
 fn construct_chain(xml: &roxmltree::Document, id:u32, order:usize ) -> Chain {
- let mut chain = markov::Chain::of_order(order);
- println!("Collecting training data");
- let alpha: Vec<char> = get_tdata(xml,id).0.chars().collect();
- let mut view: Vec<char> = Vec::new();
- for a in alpha {
-     view.push(a);
-     if a == ' ' {
-         chain.feed(view.drain(0..view.len()));
-     }
-
+    let mut chain = markov::Chain::of_order(order);
+    println!("Collecting training data");
+    let alpha: Vec<String> = get_data(xml,id);
+    let mut view: Vec<char> = Vec::new();
+    for a in alpha.iter() {
+        let strview:Vec<char> = a.as_str().trim().chars().collect();
+        for c in strview{
+            view.push(c);
+        }
+    chain.feed(view.drain(0..view.len()));
  }
  Chain {id, chain}
 }
@@ -327,26 +355,31 @@ fn get_rule(xml: &roxmltree::Document, id: u32) -> Rule {
         match gchild.tag_name().name().to_lowercase().as_str(){
              "space" => {
                  list.push(String::from("space"));
-                 style.push(' ');
+                 style.push_str("( )");
              },
 
              "hyphen" => {
                  list.push(String::from("hyphen"));
-                 style.push('-');
+                 style.push_str("(-)");
              },
 
              "getlist" => {
+                style.push('(');
                 list.push(String::from(gchild.attribute("idref").unwrap()));
-                style.push_str(gchild.attribute("title").unwrap_or("unknown"));
+                style.push_str(gchild.attribute("title").unwrap_or("name"));
+                style.push(')');
                 
              },
 
              "getrule" => {
+                style.push('(');
                 list.push(String::from(gchild.attribute("idref").unwrap()));
-                style.push_str(gchild.attribute("title").unwrap_or("unknown"));
+                style.push_str(gchild.attribute("title").unwrap_or("subrule"));
+                style.push(')');
              },
              _ => (), //match all not prior
         }; //end match
+        
         
     }; //end for
     let w = child.attribute("weight").unwrap_or("1");

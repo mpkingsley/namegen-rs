@@ -1,6 +1,6 @@
 [package]
 name = "namegen"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["mkingsley"]
 edition = "2018"
 license = "LICENSE"
@@ -12,3 +12,6 @@ markov = "1.1"
 roxmltree = "^0.13"
 random-pick = "^1.2"
 oorandom = "^11"
+clap = "2.33"
+
+[target]
