@@ -20,28 +20,27 @@ struct Chain {
 }
 
 fn main() {  
-    use clap::{Arg, App};
-    //TODO: parse args for filename (and potential output file)
+    use clap::{App};
     let cli = App::new("namegen")
-       .version("0.0.1")
+       .version("0.1.0")
        .about("Generates Realistic-looking Names from markovian chains ")
        .author("M Kingsley")
        .args_from_usage(
-        "-o, --output=[FILE] 'Sets a output file'
-         -t, --type=[CSV,TXT] 'Choose output type'
+        "-o, --output=[FILE] 'NOT Implimented: Sets a output file'
+         -t, --type=[CSV,TXT] 'NOT Implimented: Choose output type'
         <INPUT>              'Sets the input file to use'")
        .get_matches();
 
     //Load and parse file:
-    let filename = cli.value_of("INPUT").unwrap();
-    let xmldata = std::fs::read_to_string(filename).expect("Error Reading File;");
+    let filein = cli.value_of("INPUT").unwrap();
+    let xmldata = std::fs::read_to_string(filein).expect("Error Reading File;");
     let xmldoc = roxmltree::Document::parse(&xmldata).unwrap();
     let rulesets =  get_rulesets(&xmldoc);
 
     loop {
         let mut c: char; //loop control char.
         let mut ctrl  = String::new(); 
-        println!("The File {:?} contains the following types:",filename);
+        println!("The File {:?} contains the following types:",filein);
         println!("Please select your option: or q to quit");
         for (i,id) in rulesets.iter().enumerate() {
             let alpha = &xmldoc.get_node(roxmltree::NodeId::from(*id)).unwrap();
