@@ -6,6 +6,7 @@ extern crate markov;
 extern crate roxmltree;
 extern crate random_pick;
 extern crate oorandom;
+use libnamegen::*;
 
 #[derive(Clone)]
 pub struct Rule {
