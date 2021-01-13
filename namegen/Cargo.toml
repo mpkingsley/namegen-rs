@@ -13,6 +13,6 @@ roxmltree = "0.14.0"
 random-pick = "^1.2"
 oorandom = "^11"
 clap = "2.33"
-libnamegen = "../"
+libnamegen = { path = "../libnamegen"}
 
 [target]

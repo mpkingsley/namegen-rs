@@ -167,6 +167,7 @@ name = "namegen"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "libnamegen",
  "markov",
  "oorandom",
  "random-pick",

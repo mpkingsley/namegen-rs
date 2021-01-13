@@ -5,14 +5,9 @@ mod tests {
         assert_eq!(2 + 2, 4);
     }
 }
+mod rule;
 
-
-#[derive(Clone)]
-pub struct Rule {
-    fmt: Vec<String>, //idref string
-    weight: u32, //weight for each idref
-    style: String,    //style with formatting
-}
+use rule::Rule;
 
 struct Chain {
     id: u32, //node id
@@ -131,7 +126,7 @@ pub fn iter_generate(xml:&roxmltree::Document, ruleset: &[Rule], order:usize, it
     loop {
         let mut name = String::new();
         let rule = rule_select(ruleset);
-        println!("Generating name {: }: {: }",names.len(),rule.style);
+        println!("Generating name {: }: {: }",names.len(),rule.get_style());
         for idref in &rule.fmt {
             let id = find_id(xml, idref);
             match idref.as_str() {
