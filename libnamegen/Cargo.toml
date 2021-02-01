@@ -9,5 +9,4 @@ edition = "2018"
 [dependencies]
 markov = "^1.1"
 roxmltree = "^0.14.0"
-random-pick = "^1.2"
 oorandom = "^11"
