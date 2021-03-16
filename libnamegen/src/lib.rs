@@ -41,6 +41,24 @@ use rule::Rule;
 use oorandom::Rand32;
 use xmlparse::Xmldoc;
 
+pub fn select_rule<'a>(ruleset: &'a[Rule<'a>]) -> &Rule<'a> {
+    let mut weights:Vec<usize> = Vec::new();
+    let mut index:Vec<&Rule<'a>> = Vec::new();
+    let rng = Rand32::new(seed: u64);
+    for r in ruleset {
+        weights.push(r.get_weight() as usize);
+        let mut i = r.get_weight();
+        while i > 0 {
+            index.push(&r);
+            i= i - 1;
+        }
+
+      
+    }
+
+    ruleset[];
+  
+  }
 
 
 

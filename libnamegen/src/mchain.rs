@@ -1,5 +1,7 @@
 extern crate oorandom;
-use std::collections::HashMap;
+extern crate markov;
+
+//use std::collections::HashMap;
 
 struct Chain {
         id: u32, //node id
@@ -39,6 +41,14 @@ struct Chain {
         pub fn is_trained(&self) -> bool {
             self.trained
         }
+
+        pub fn generate(&self) -> Vec<char> {
+            let chain = &self.markov;
+            return chain.generate();
+        }
+
+        
     
     }
+
     
