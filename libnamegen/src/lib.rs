@@ -40,13 +40,15 @@ mod mchain;
 use rule::Rule;
 use oorandom::Rand32;
 use xmlparse::Xmldoc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn select_rule<'a>(ruleset: &'a[Rule<'a>]) -> &Rule<'a> {
-    let mut weights:Vec<usize> = Vec::new();
+  //  let mut weights:Vec<usize> = Vec::new();  //may not need this 
     let mut index:Vec<&Rule<'a>> = Vec::new();
-    let rng = Rand32::new(seed: u64);
+    let seed = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let mut rng = Rand32::new(seed);
     for r in ruleset {
-        weights.push(r.get_weight() as usize);
+       // weights.push(r.get_weight() as usize);
         let mut i = r.get_weight();
         while i > 0 {
             index.push(&r);
@@ -56,8 +58,7 @@ pub fn select_rule<'a>(ruleset: &'a[Rule<'a>]) -> &Rule<'a> {
       
     }
 
-    ruleset[];
-  
+   return index[rng.rand_range(0 .. index.len() as u32 ) as usize];  
   }
 
 

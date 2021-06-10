@@ -1,12 +1,15 @@
+#![feature(try_trait)]
+
 use roxmltree::Document;
 
 pub struct Xmldoc<'a> {
     file: Document<'a>,
     filename: &'a str
 }
+#[derive(Debug)]
 pub enum Error {
     DocumentError(roxmltree::Error),
-    FileReadError(std::io::Error),
+    FileReadError(std::io::Error)
 }
 
 impl From<roxmltree::Error> for Error {
@@ -22,22 +25,26 @@ impl From<std::io::Error> for Error {
     }
 }
 
+
 impl<'a> Xmldoc<'a> {
 
- fn new(data: &'a str, filename:&'a str ) -> Result<Self, Error> {
+ pub fn new(filename:&'a str ) -> Result<Self, Error> {
 
-    let file: Document<'a>;
-    file = match Document::parse(data){
-                Ok(document) => document,
-                Err(err) => return Err(Error::DocumentError(err)),
-            };
-    let doc = Xmldoc{file:file,filename};
+    let xml = read_file(filename).unwrap_or_default();
+
+    let file: Document<'a> =  match Document::parse(&xml) {
+        Ok(d) => d,
+        Err(err) => return Err(Error::DocumentError(err)),
+    };
+    
+    let doc = Xmldoc{file,filename};
+
 
     Ok(doc)
  
  }
 
- fn get_rulesets(&self) -> Vec<u32> {
+ pub fn get_rulesets(&self) -> Vec<u32> {
     let mut ids:Vec<u32> = vec!();
     let xml = &self.file;
     for node in xml.descendants(){
@@ -48,7 +55,7 @@ impl<'a> Xmldoc<'a> {
     ids
   }
 
-  fn find_id(&self, idref: &str) -> u32 {
+ pub fn find_id(&self, idref: &str) -> u32 {
     use roxmltree::NodeId;
     let xml = &self.file;
     let lists = &self.get_lists();
@@ -69,7 +76,7 @@ impl<'a> Xmldoc<'a> {
   0 //return 0 if not found
  }
 
- fn get_lists(&self) -> Vec<u32> {
+ pub fn get_lists(&self) -> Vec<u32> {
     let xml = &self.file;
     let mut ids:Vec<u32> = vec!();
     for node in xml.descendants(){
@@ -80,13 +87,13 @@ impl<'a> Xmldoc<'a> {
     ids
   }
 
-  fn get_data(&self, listid: u32) -> Vec<String> {
+ pub fn get_data(&self, listid: u32) -> Vec<String> {
     let mut data:Vec<String> = Vec::new();
     let xml = &self.file;
     let list = xml.get_node(roxmltree::NodeId::from(listid)).unwrap();
     for value in list.children(){
         if value.tag_name().name().to_lowercase() == "value" {
-            let text = value.text().unwrap_or("Parsing Err").trim();
+            let text = value.text().unwrap_or("Parsing_Err").trim();
             data.push(String::from(text));
            // println!("Found data: {: }", text);
         }
@@ -94,15 +101,18 @@ impl<'a> Xmldoc<'a> {
             println!("Tag found with name: {: }",(value.tag_name().name().to_lowercase()));
         }; */
     }
-data
-}
+    data
+  }
 
 }
 
-pub fn read_file(filename:&str) -> Result<String, Error> {
-    match std::fs::read_to_string(filename){
-       Ok(data) => return Ok(data),
+pub fn read_file<'a> (filename:&'a str) -> Result<String, Error> {
+    let read = std::fs::read_to_string(filename);
+    match read {
+        Ok(data) => {
+            return Ok(data)
+        },
+        Err(error) => return Err(Error::FileReadError(error)),
+    };
 
-       Err(error) => return Err(Error::FileReadError(error)),
-   };
 }
