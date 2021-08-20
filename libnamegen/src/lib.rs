@@ -1,4 +1,5 @@
-#[crate_name="libnamegen"]
+#![crate_name="libnamegen"]
+#![warn(clippy::needless_return)]
 
 #[cfg(test)]
 mod tests {
@@ -7,11 +8,12 @@ mod tests {
     fn it_works() {
         assert_eq!(2 + 2, 4);
     }
+
 }
+
+
 mod xmlparse;
 mod mchain;
-
-
 use oorandom::Rand32;
 use xmlparse::{*};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -27,10 +29,10 @@ pub fn select_rule(ruleset: xmlparse::Ruleset) -> Rule {
         let mut i = r.get_weight();
         while i > 0 {
             index.push(r.clone());
-            i= i - 1;
+            i-= 1;
         }      
     }
-   return index[rng.rand_range(0.. index.len() as u32 ) as usize].clone();  
+    return index[rng.rand_range(0.. index.len() as u32 ) as usize].clone();  
   }
 
   ///Seletcts an unweighted item randomly from a list. 
@@ -50,5 +52,8 @@ pub fn select_rule(ruleset: xmlparse::Ruleset) -> Rule {
 
     return Ok(generators);
   }
+
+  
+
 
 

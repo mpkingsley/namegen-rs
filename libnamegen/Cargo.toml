@@ -10,3 +10,6 @@ edition = "2018"
 markov = "^1.1"
 roxmltree = "^0.14.0"
 oorandom = "^11"
+
+[lib]
+crate-type=["rlib","cdylib", "staticlib" ]

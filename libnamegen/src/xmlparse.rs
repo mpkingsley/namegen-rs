@@ -42,7 +42,7 @@ pub struct Ruleset  {
 
 impl Rule{
  pub fn new(idref:Vec<String>, weight:u32, style: String) -> Rule {
-     Rule{idref: idref.clone(), weight: weight.clone(), style: style.clone() }
+     Rule{idref: idref.clone(), weight, style: style.clone() }
  }
 
 pub fn get_idref(&self) -> Vec<String> {
@@ -105,7 +105,7 @@ impl<'a> Xmldoc<'a> {
     if file.is_err() {
         return Err(file.unwrap_err());
     }
-    let data = file.unwrap_or(String::from("")).into_boxed_str();
+    let data = file.unwrap_or_else(|_| String::from("")).into_boxed_str();
     let xml: &'a str = Box::leak(data);
 
 
@@ -115,11 +115,10 @@ impl<'a> Xmldoc<'a> {
     };
     
     let doc = Xmldoc{file,filename};
-
-
     Ok(doc)
  
  }
+ 
  pub fn get_title(&self, id: u32) -> Option<String> {
      let xml = &self.file;
      let node = xml.get_node(NodeId::from(id));
