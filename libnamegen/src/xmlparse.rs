@@ -26,14 +26,14 @@ impl From<std::io::Error> for Error {
         Error::FileReadError(e)
     }
 }
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Rule {
    idref: Vec<String>, //idref string
     weight: u32, //weight for each rule
     style: String,    //style with formatting
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Ruleset  {
     id: String,
     categories: Vec<String>,
@@ -42,7 +42,7 @@ pub struct Ruleset  {
 
 impl Rule{
  pub fn new(idref:Vec<String>, weight:u32, style: String) -> Rule {
-     Rule{idref: idref.clone(), weight, style: style.clone() }
+     Rule{idref: idref.clone(), weight: weight.clone(), style: style.clone() }
  }
 
 pub fn get_idref(&self) -> Vec<String> {
@@ -73,17 +73,20 @@ impl Ruleset{
 
 }
 
-pub trait Generator {
+pub trait Style {
     fn get_style(&self) ->String;
+
 }
-impl Generator for Rule {
+
+impl Style for Rule {
     //Returns the Rule Style
     fn get_style(&self) -> String{
         self.style.clone()
     }
+
 }
 
-impl Generator for Ruleset {
+impl Style for Ruleset {
     ///Returns a newline-delimited list of Rule styles.
     fn get_style(&self) ->String{ 
         let mut style:String = String::new();
@@ -96,6 +99,7 @@ impl Generator for Ruleset {
 
     style
     }
+
 }
 
 impl<'a> Xmldoc<'a> {
@@ -105,7 +109,7 @@ impl<'a> Xmldoc<'a> {
     if file.is_err() {
         return Err(file.unwrap_err());
     }
-    let data = file.unwrap_or_else(|_| String::from("")).into_boxed_str();
+    let data = file.unwrap_or(String::from("")).into_boxed_str();
     let xml: &'a str = Box::leak(data);
 
 
@@ -115,10 +119,11 @@ impl<'a> Xmldoc<'a> {
     };
     
     let doc = Xmldoc{file,filename};
+
+
     Ok(doc)
  
  }
- 
  pub fn get_title(&self, id: u32) -> Option<String> {
      let xml = &self.file;
      let node = xml.get_node(NodeId::from(id));
@@ -170,7 +175,7 @@ impl<'a> Xmldoc<'a> {
      return generators;
  }
 
- pub fn find_id(&self, idref: &str) -> u32 {
+ pub fn find_id(&self, idref: &str) -> Option<u32> {
     let xml = &self.file;
     let lists = &self.get_lists();
     let rulesets = &self.get_rulesets();
@@ -178,16 +183,16 @@ impl<'a> Xmldoc<'a> {
     for id in lists {
         let list =  xml.get_node(NodeId::from(*id)).unwrap();
         if list.attribute("id").unwrap_or("none") == idref {
-            return *id
+            return Some(*id)
         };
     }
     for id in rulesets {
         let rule =  xml.get_node(NodeId::from(*id)).unwrap();
          if rule.attribute("id").unwrap_or("none") == idref {
-             return *id
+             return Some(*id)
          };
      }
-  0 //return 0 if not found
+  None //return none if not found
  }
 
  pub fn get_lists(&self) -> Vec<u32> {
@@ -261,6 +266,7 @@ impl<'a> Xmldoc<'a> {
     }
     data
   }
+
 
 }
 

@@ -3,7 +3,8 @@ extern crate markov;
 
 //use std::collections::HashMap;
 
-struct Chain {
+#[derive(Debug)]
+pub struct Chain {
         id: u32, //node id
         filename: String, //filename of xml file
         markov: markov::Chain<char>,
@@ -15,7 +16,7 @@ struct Chain {
             let mut markov = markov::Chain::of_order(order);
             Chain {
                 id: listid,
-                filename: String::from(filename),
+             filename: String::from(filename),
                 markov,
                 trained: false
             }
