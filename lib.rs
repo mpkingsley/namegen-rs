@@ -69,6 +69,11 @@ pub trait Generator {
 
 impl Generator for Rule {
     fn marcov_generate<'a>(&self,files:&[Document<'a>]) -> Option<String> {
+      for idref in self.get_idref(){
+        for file in files {
+          let xml = file.file
+        }
+      }
       
       None
     }
